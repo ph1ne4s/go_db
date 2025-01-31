@@ -69,3 +69,39 @@ func (node BNode) getOffset(idx uint16) uint16 {
 	pos := 4 + 8*node.nkeys() + 2*(idx-1)
 	return binary.LittleEndian.Uint16(node[pos:])
 }
+
+func (node BNode) kvPos(idx uint16) uint16 {
+	assert(idx <= node.nkeys(), "kvpos")
+	return 4 + 8*node.nkeys() + 2*node.nkeys() + node.getOffset((idx))
+}
+func (node BNode) getKey(idx uint16) []byte {
+	assert(idx < node.nkeys(), "getkeys")
+	pos := node.kvPos(idx)
+	klen := binary.LittleEndian.Uint16(node[pos:])
+	return node[pos+4:][:klen]
+}
+
+func (node BNode) getVal(idx uint16) []byte {
+	assert(idx < node.nkeys(), "gatval")
+	pos := node.kvPos(idx)
+	klen := binary.LittleEndian.Uint16(node[pos:])
+	vlen := binary.LittleEndian.Uint16(node[pos+2:])
+	return node[pos+4+klen:][:vlen] //pos is location of kv pair, 4 is {2 for key len and 2 for val len}, klen is length of key and is later sliced till vlen to get only val
+}
+
+func nodeAppendKV(new BNode, idx uint16, ptr uint64, key []byte, val []byte) {
+	new.setPtr(idx, ptr)
+	pos := new.kvPos(idx)
+
+	binary.LittleEndian.PutUint16(new[pos+0:], uint16(len(key)))
+	binary.LittleEndian.PutUint16(new[pos+2:], uint16(len(val)))
+
+	copy(new[pos+4:], key)
+	copy(new[pos+4+uint16(len(key)):], val)
+
+	new.setOffset(idx+1, new.getOffset(idx)+4+uint16((len(key)+len(key)+len(val))))
+}
+
+func (node BNode) nbytes() uint16 {
+	return node.kvPos(node.nkeys())
+}
