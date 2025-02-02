@@ -62,6 +62,12 @@ func (node BNode) setPtr(idx uint16, val uint64) {
 	binary.BigEndian.PutUint64(node[pos:], val)
 }
 
+func offsetPos(node BNode, idx uint16) uint16 {
+	assert(idx < 1 || idx > node.nkeys(), "offsetPos: Index out of bounds!")
+
+	return 4 + 8*node.nkeys() + 2*(idx-1)
+}
+
 // read offset array
 func (node BNode) getOffset(idx uint16) uint16 {
 	if idx == 0 {
@@ -71,6 +77,10 @@ func (node BNode) getOffset(idx uint16) uint16 {
 	return binary.LittleEndian.Uint16(node[pos:])
 }
 
+// updates offset for kv-pair at given index
+func (node BNode) setOffset(idx uint16, offset uint16) {
+	binary.LittleEndian.PutUint16(node[offsetPos(node, idx):], offset)
+}
 func (node BNode) kvPos(idx uint16) uint16 {
 	assert(idx <= node.nkeys(), "kvpos")
 	return 4 + 8*node.nkeys() + 2*node.nkeys() + node.getOffset((idx))
@@ -215,6 +225,12 @@ func nodeReplaceKidN(
 		nodeAppendKV(new, idx+uint16(i), uint64(tree.new(node)), node.getKey(0), nil)
 	}
 	nodeAppendRange(new, old, idx+inc, idx+1, old.nkeys()-(idx+1))
+}
+func nodeReplace2Kid(new BNode, old BNode, idx uint16, merged uint64, key []byte) {
+	new.setHeader(BNODE_NODE, old.nkeys()-1)
+	nodeAppendRange(new, old, 0, 0, idx)
+	nodeAppendKV(new, idx, merged, key, nil)
+	nodeAppendRange(new, old, idx+1, idx+2, old.nkeys()-(idx+1))
 }
 
 func treeInsert(tree *BTree, node BNode, key []byte, val []byte) BNode {
