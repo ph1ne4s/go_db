@@ -19,6 +19,16 @@ const (
 	BNODE_LEAF = 2
 )
 
+type BTree struct {
+	root uint64 //root pointer
+
+	//callbacks for on disk pages
+	get func(uint64) []byte //read data from page
+	new func([]byte) uint64 // allocate a new page with data
+	del func(uint64)        // deallocate a page number
+
+}
+
 const BTREE_PAGE_SIZE = 4096
 const BTREE_MAX_KEY_SIZE = 1000
 const BTREE_MAX_VAL_SIZE = 3000
@@ -203,16 +213,6 @@ func nodeSplit3(old BNode) (uint16, [3]BNode) {
 	return 3, [3]BNode{leftleft, middle, right} // 3 nodes
 }
 
-type BTree struct {
-	root uint16 //root pointer
-
-	//callbacks for on disk pages
-	get func(uint16) []byte //read data from page
-	new func([]byte) uint16 // allocate a new page with data
-	del func(uint16)        // deallocate a page number
-
-}
-
 // replace a link with multiple links
 func nodeReplaceKidN(
 	tree *BTree, new BNode, old BNode, idx uint16,
@@ -248,11 +248,11 @@ func treeInsert(tree *BTree, node BNode, key []byte, val []byte) BNode {
 	case BNODE_NODE:
 		// recursive insertion to the kid node
 		kptr := node.getPtr(idx)
-		knode := treeInsert(tree, tree.get(uint16(kptr)), key, val)
+		knode := treeInsert(tree, tree.get(kptr), key, val)
 		// after insertion, split the result
 		nsplit, split := nodeSplit3(knode)
 		// deallocate the old kid node
-		tree.del(uint16(kptr))
+		tree.del(kptr)
 		// update the kid links
 		nodeReplaceKidN(tree, new, node, idx, split[:nsplit]...)
 	}

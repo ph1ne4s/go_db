@@ -37,14 +37,14 @@ func shouldMerge(tree *BTree, node BNode, idx uint16, updated BNode) (int, BNode
 		return 0, BNode{}
 	}
 	if idx > 0 {
-		sibling := BNode(tree.get(uint16(node.getPtr(idx - 1))))
+		sibling := BNode(tree.get(node.getPtr(idx - 1)))
 		merged := sibling.nbytes() + updated.nbytes() - 4
 		if merged <= BTREE_PAGE_SIZE {
 			return -1, sibling //left
 		}
 	}
 	if idx+1 < node.nkeys() {
-		sibling := BNode(tree.get(uint16(node.getPtr(idx + 1))))
+		sibling := BNode(tree.get(node.getPtr(idx + 1)))
 		merged := sibling.nbytes() + updated.nbytes() - 4
 		if merged <= BTREE_PAGE_SIZE {
 			return 1, sibling //right
@@ -60,11 +60,11 @@ func treeDelete(tree *BTree, node BNode, key []byte) BNode
 func nodeDelete(tree *BTree, node BNode, idx uint16, key []byte) BNode {
 	// recurse into the kid
 	kptr := node.getPtr(idx)
-	updated := treeDelete(tree, tree.get(uint16(kptr)), key)
+	updated := treeDelete(tree, tree.get(kptr), key)
 	if len(updated) == 0 {
 		return BNode{} // not found
 	}
-	tree.del(uint16(kptr))
+	tree.del(kptr)
 	// check for merging
 	new := BNode(make([]byte, BTREE_PAGE_SIZE))
 	mergeDir, sibling := shouldMerge(tree, node, idx, updated)
@@ -72,12 +72,12 @@ func nodeDelete(tree *BTree, node BNode, idx uint16, key []byte) BNode {
 	case mergeDir < 0: // left
 		merged := BNode(make([]byte, BTREE_PAGE_SIZE))
 		nodeMerge(merged, sibling, updated)
-		tree.del(uint16(node.getPtr(idx - 1)))
+		tree.del(node.getPtr(idx - 1))
 		nodeReplace2Kid(new, node, idx-1, uint64(tree.new(merged)), merged.getKey(0))
 	case mergeDir > 0: // right
 		merged := BNode(make([]byte, BTREE_PAGE_SIZE))
 		nodeMerge(merged, updated, sibling)
-		tree.del(uint16(node.getPtr(idx + 1)))
+		tree.del(node.getPtr(idx + 1))
 		nodeReplace2Kid(new, node, idx, uint64(tree.new(merged)), merged.getKey(0))
 	case mergeDir == 0 && updated.nkeys() == 0:
 		assert(node.nkeys() == 1 && idx == 0, "1 empty child but no sibling") // 1 empty child but no sibling
