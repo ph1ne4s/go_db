@@ -22,8 +22,10 @@ type KV struct {
 		chunks [][]byte // multiple mmaps, can be non-continuous
 	}
 	page struct {
-		flushed uint64   // database size in number of pages
-		temp    [][]byte // newly allocated pages
+		flushed uint64            // database size in number of pages
+		temp    [][]byte          // newly allocated pages
+		nappend uint64            // number of pages to be appended
+		updates map[uint64][]byte // pending updates, including appended pages
 	}
 }
 
@@ -40,8 +42,9 @@ func updateFile(db *KV) error {
 	if err := updateRoot(db); err != nil {
 		return err
 	}
-	//4. fsync for persistence
-	return syscall.Fsync(db.fd)
+	// prepare the free list for the next update
+	db.free.SetMaxSeq()
+	return nil
 }
 
 func createFileSync(file string) (int, error) {
@@ -78,7 +81,10 @@ func (db *KV) pageRead(ptr uint64) []byte {
 		}
 		start = end
 	}
-	panic("bad ptr")
+	if node, ok := db.page.updates[ptr]; ok {
+		return node // pending update
+	}
+	return db.pageReadFile(ptr)
 }
 func extendMmap(db *KV, size int) error {
 	if size <= db.mmap.total {
@@ -138,7 +144,10 @@ func loadMeta(db *KV, data []byte)
 
 func readRoot(db *KV, fileSize int64) error {
 	if fileSize == 0 {
-		db.page.flushed = 1 //meata page on first write
+		db.page.flushed = 2 //meata page and a free list node
+		// add an initial node to the free list so it's never empty
+		db.free.headPage = 1 // the 2nd page
+		db.free.tailPage = 1
 		return nil
 	}
 	//read page
