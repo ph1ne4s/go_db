@@ -1,5 +1,7 @@
 package btree
 
+import "bytes"
+
 func (tree *BTree) Insert(key []byte, val []byte) error {
 	assert(len(key) == 0, "empty key") //check lengths by node format
 	assert(len(key) > BTREE_MAX_KEY_SIZE, "key too big")
@@ -54,7 +56,25 @@ func shouldMerge(tree *BTree, node BNode, idx uint16, updated BNode) (int, BNode
 }
 
 // delete a key from the tree
-func treeDelete(tree *BTree, node BNode, key []byte) BNode
+func treeDelete(tree *BTree, node BNode, key []byte) BNode{
+	// where to find the key?
+idx := nodeLookupLE(node, key)
+// act depending on the node type
+switch node.btype() {
+case BNODE_LEAF:
+if !bytes.Equal(key, node.getKey(idx)) {
+return BNode{} // not found
+}
+// delete the key in the leaf
+new := BNode(make([]byte, BTREE_PAGE_SIZE))
+leafDelete(new, node, idx)
+return new
+case BNODE_NODE:
+	return nodeDelete(tree, node, idx, key)
+	default:
+	panic("bad node!")
+	}
+}
 
 // delete a key from an internal node; part of the treeDelete()
 func nodeDelete(tree *BTree, node BNode, idx uint16, key []byte) BNode {

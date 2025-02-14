@@ -12,7 +12,7 @@ type C struct {
 	pages map[uint64]BNode  //in-memeory pages
 }
 
-func newC() *C {
+func NewC() *C {
 	pages := map[uint64]BNode{}
 	return &C{
 		tree: BTree{
