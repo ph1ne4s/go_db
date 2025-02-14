@@ -1,6 +1,7 @@
 package btree
 
 import (
+	"fmt"
 	"unsafe"
 )
 
@@ -39,4 +40,16 @@ func newC() *C {
 func (c *C) add(key string, val string) {
 	c.tree.Insert([]byte(key), []byte(val))
 	c.ref[key] = val // reference data
+}
+func (c *C) del(key string) bool {
+	delete(c.ref, key)
+	return c.tree.Delete([]byte(key))
+}
+func (c *C) PrintTree() {
+	// fmt.Printf("Root page: %d\n", c.pages[c.tree.root])
+	fmt.Println("Pages:")
+	for pt, node := range c.pages {
+		fmt.Println("Pointer:", pt)
+		fmt.Println("BNode data:", node)
+	}
 }

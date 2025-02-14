@@ -101,3 +101,22 @@ func nodeMerge(new BNode, left BNode, right BNode) {
 	nodeAppendRange(new, left, 0, 0, left.nkeys())
 	nodeAppendRange(new, right, left.nkeys(), 0, right.nkeys())
 }
+func (tree *BTree) Delete(key []byte) bool {
+	assert(len(key) != 0, "zero key size")
+	assert(len(key) <= BTREE_MAX_KEY_SIZE, "key size too big")
+	if tree.root == 0 {
+		return false
+	}
+	updated := treeDelete(tree, tree.get(tree.root), key)
+	if len(updated) == 0 {
+		return false // not found
+	}
+	tree.del(tree.root)
+	if updated.btype() == BNODE_NODE && updated.nkeys() == 1 {
+		// remove a level
+		tree.root = updated.getPtr(0)
+	} else {
+		tree.root = tree.new(updated)
+	}
+	return true
+}

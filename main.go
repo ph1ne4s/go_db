@@ -32,3 +32,8 @@ func SaveData(path string, data []byte) error {
 	return err
 
 }
+
+func main(){
+	mytree:=btree.newC()
+	
+}
