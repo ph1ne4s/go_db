@@ -1,13 +1,10 @@
 package btree
 
 import (
-	"encoding/binary"
 	"fmt"
 	"os"
 	"path"
 	"syscall"
-
-	"golang.org/x/sys/unix"
 )
 
 type KV struct {
@@ -24,28 +21,57 @@ type KV struct {
 	page struct {
 		flushed uint64            // database size in number of pages
 		temp    [][]byte          // newly allocated pages
+		nfree int //number of pages taken from free list
 		nappend uint64            // number of pages to be appended
 		updates map[uint64][]byte // pending updates, including appended pages
 	}
 }
+// callback for BTree & FreeList, dereference a pointer.
+func (db *KV) pageGet(ptr uint64) BNode {
+	if page, ok := db.page.updates[ptr]; ok {
+	assert(page != nil, " page nil")
+	return BNode(page) // for new pages
+	}
+	return pageGetMapped(db, ptr) // for written pages
+	}
 
-func updateFile(db *KV) error {
-	//1.new node
-	if err := writePages(db); err != nil {
-		return err
+func pageGetMapped(db *KV, ptr uint64) BNode {
+		start := uint64(0)
+		for _, chunk := range db.mmap.chunks {
+		end := start + uint64(len(chunk))/BTREE_PAGE_SIZE
+		if ptr < end {
+			offset := BTREE_PAGE_SIZE * (ptr - start)
+			return BNode(chunk[offset : offset+BTREE_PAGE_SIZE])
+			}
+			start = end
+			}
+			panic("bad ptr")
+			}
+// callback for BTree, allocate a new page.
+func (db *KV) pageNew(node BNode) uint64 {
+	assert(len(node) <= BTREE_PAGE_SIZE, "node size too big")
+	ptr := uint64(0)
+	if db.page.nfree < db.free.Total() {
+	// reuse a deallocated page
+	ptr = db.free.Get(db.page.nfree)
+	db.page.nfree++
+	} else {
+	// append a new page
+	ptr = db.page.flushed + uint64(db.page.nappend)
+	db.page.nappend++
 	}
-	//2.fsync for order in 1 and 3
-	if err := syscall.Fsync(db.fd); err != nil {
-		return err
+	db.page.updates[ptr] = node
+	return ptr
 	}
-	//3.update root pointer atomically
-	if err := updateRoot(db); err != nil {
-		return err
+
+	// callback for BTree, deallocate a page.
+func (db *KV) pageDel(ptr uint64) {
+	db.page.updates[ptr] = nil
 	}
-	// prepare the free list for the next update
-	db.free.SetMaxSeq()
-	return nil
-}
+// callback for FreeList, reuse a page.
+func (db *KV) pageUse(ptr uint64, node BNode) {
+	db.page.updates[ptr] = node
+	}
 
 func createFileSync(file string) (int, error) {
 	// get dir fd
@@ -69,23 +95,6 @@ func createFileSync(file string) (int, error) {
 	return fd, nil
 
 }
-
-// `BTree.get`, read a page.
-func (db *KV) pageRead(ptr uint64) []byte {
-	start := uint64(0)
-	for _, chunk := range db.mmap.chunks {
-		end := start + uint64(len(chunk))/BTREE_PAGE_SIZE
-		if ptr < end {
-			offset := BTREE_PAGE_SIZE * (ptr - start)
-			return chunk[offset : offset+BTREE_PAGE_SIZE]
-		}
-		start = end
-	}
-	if node, ok := db.page.updates[ptr]; ok {
-		return node // pending update
-	}
-	return db.pageReadFile(ptr)
-}
 func extendMmap(db *KV, size int) error {
 	if size <= db.mmap.total {
 		return nil // enough range
@@ -105,87 +114,32 @@ func extendMmap(db *KV, size int) error {
 	db.mmap.chunks = append(db.mmap.chunks, chunk)
 	return nil
 }
-func (db *KV) pageAppend(node []byte) uint64 {
-	ptr := db.page.flushed + uint64(len(db.page.temp)) // just append
-	db.page.temp = append(db.page.temp, node)
+// callback for FreeList, allocate a new page.
+func (db *KV) pageAppend(node BNode) uint64 {
+	assert(len(node) <= BTREE_PAGE_SIZE, "node too big")
+	ptr := db.page.flushed + uint64(db.page.nappend)
+	db.page.nappend++
+	db.page.updates[ptr] = node
 	return ptr
-}
-
-func writePages(db *KV) error {
-	// extending mmap
-	size := (int(db.page.flushed) + len(db.page.temp)) * BTREE_PAGE_SIZE
-	if err := extendMmap(db, size); err != nil {
-		return err
 	}
-	//write data pages to file
-	offset := int64(db.page.flushed * BTREE_PAGE_SIZE)
-	if _, err := unix.Pwritev(db.fd, db.page.temp, offset); err != nil {
-		return err
-	}
-	//discard in-memory data
-	db.page.flushed += uint64(len(db.page.temp))
-	db.page.temp = db.page.temp[:0]
-	return nil
-}
 
-const DB_SIG = "BuildingDB"
-
-// sig  root_ptr  page_used
-// 16B  8B         8B
-
-func saveMeta(db *KV) []byte {
-	var data [32]byte
-	copy(data[:16], []byte(DB_SIG))
-	binary.LittleEndian.PutUint64(data[16:], db.tree.root)
-	binary.LittleEndian.PutUint64(data[24:], db.page.flushed)
-	return data[:]
-}
-func loadMeta(db *KV, data []byte)
-
-func readRoot(db *KV, fileSize int64) error {
-	if fileSize == 0 {
-		db.page.flushed = 2 //meata page and a free list node
-		// add an initial node to the free list so it's never empty
-		db.free.headPage = 1 // the 2nd page
-		db.free.tailPage = 1
-		return nil
-	}
-	//read page
-	data := db.mmap.chunks[0]
-	loadMeta(db, data)
-
-	return nil
-}
-func updateRoot(db *KV) error { //update meta atomically
-	if _, err := syscall.Pwrite(db.fd, saveMeta(db), 0); err != nil {
-		return fmt.Errorf("write meta page: %w", err)
+	func writePages(db *KV) error {
+		// update the free list
+		freed := []uint64{}
+		for ptr, page := range db.page.updates {
+		if page == nil {
+		freed = append(freed, ptr)
+		}
+		}
+		db.free.Update(db.page.nfree, freed)
+		// extend the file & mmap if needed
+		// omitted...
+		// copy pages to the file
+		for ptr, page := range db.page.updates {
+		if page != nil {
+		copy(pageGetMapped(db, ptr), page)
+		}
 	}
 	return nil
-}
-func (db *KV) Set(key []byte, val []byte) error {
-	meta := saveMeta(db) // save the in-memory state (tree root)
-	if err := db.tree.Insert(key, val); err != nil {
-		return err // length limit
-	}
-	return updateOrRevert(db, meta)
-}
-func updateOrRevert(db *KV, meta []byte) error {
-	// ensure the on-disk meta page matches the in-memory one after an error
-	if db.failed {
-		// write and fsync the previous meta page
-		// ...
-		db.failed = false
-	}
-	// 2-phase update
-	err := updateFile(db)
-	// revert on error
-	if err != nil {
-		// the in-memory states can be reverted immediately to allow reads
-		loadMeta(db, meta)
-		// discard temporaries
-		db.page.temp = db.page.temp[:0]
-		db.failed = true
 	}
 
-	return err
-}

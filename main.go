@@ -3,11 +3,13 @@ package main
 import (
 	"fmt"
 
-	"github.com/ph1ne4s/go_db/btree"
+	"dbfs/btree"
 )
 
 func main() {
 	fmt.Println("Creating new tree...")
-	mytree := btree.NewC()
-	fmt.Printf("Tree created: %+v\n", mytree)
+	btree.K()
+	myTree:=btree.NewC()
+	myTree.Add("0", "Aviral hereee")
+	//fmt.Printf("Tree created: %+v\n", mytree)
 }

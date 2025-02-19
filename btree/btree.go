@@ -34,15 +34,13 @@ const BTREE_MAX_KEY_SIZE = 1000
 const BTREE_MAX_VAL_SIZE = 3000
 
 func assert(p bool, msg string) {
-	if p {
+	if !p {
 		panic(msg)
 	}
 }
 func init() {
 	node1max := 4 + 8 + 2 + 4 + BTREE_MAX_KEY_SIZE + BTREE_MAX_VAL_SIZE
-	if node1max <= BTREE_PAGE_SIZE {
-		panic("Size exceeded")
-	}
+	assert(node1max<=BTREE_PAGE_SIZE, "size too big")
 }
 
 // getters

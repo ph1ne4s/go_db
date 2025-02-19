@@ -12,6 +12,10 @@ type C struct {
 	pages map[uint64]BNode  //in-memeory pages
 }
 
+
+func K(){
+	print("Btree imported")
+}
 func NewC() *C {
 	pages := map[uint64]BNode{}
 	return &C{
@@ -37,11 +41,11 @@ func NewC() *C {
 		pages: pages,
 	}
 }
-func (c *C) add(key string, val string) {
+func (c *C) Add(key string, val string) {
 	c.tree.Insert([]byte(key), []byte(val))
 	c.ref[key] = val // reference data
 }
-func (c *C) del(key string) bool {
+func (c *C) Del(key string) bool {
 	delete(c.ref, key)
 	return c.tree.Delete([]byte(key))
 }
