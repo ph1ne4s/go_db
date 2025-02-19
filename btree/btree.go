@@ -71,7 +71,7 @@ func (node BNode) setPtr(idx uint16, val uint64) {
 }
 
 func offsetPos(node BNode, idx uint16) uint16 {
-	assert(idx < 1 || idx > node.nkeys(), "offsetPos: Index out of bounds!")
+	assert(idx >= 1 || idx <= node.nkeys(), "offsetPos: Index out of bounds!")
 
 	return 4 + 8*node.nkeys() + 2*(idx-1)
 }

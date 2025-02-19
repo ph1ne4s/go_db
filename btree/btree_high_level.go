@@ -3,9 +3,9 @@ package btree
 import "bytes"
 
 func (tree *BTree) Insert(key []byte, val []byte) error {
-	assert(len(key) == 0, "empty key") //check lengths by node format
-	assert(len(key) > BTREE_MAX_KEY_SIZE, "key too big")
-	assert(len(val) > BTREE_MAX_VAL_SIZE, "val too big")
+	assert(len(key) != 0, "empty key") //check lengths by node format
+	assert(len(key) <= BTREE_MAX_KEY_SIZE, "key too big")
+	assert(len(val) <= BTREE_MAX_VAL_SIZE, "val too big")
 
 	if tree.root == 0 { // create first node
 		root := BNode(make([]byte, BTREE_PAGE_SIZE))
